@@ -11,8 +11,8 @@ load_dotenv()
 st.set_page_config(layout="wide")
 st.title("Welcome to Data Visualization Dashboard")
 
-USERNAME = os.getenv("USERNAME")
-TOKEN = os.getenv("TOKEN")
+USERNAME = st.secrets["USERNAME"]
+TOKEN = st.secrets["TOKEN"]
 BASE_URL = "https://api.github.com"
 
 @st.cache_data
