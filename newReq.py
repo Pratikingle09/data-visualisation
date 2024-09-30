@@ -18,7 +18,9 @@ def export_url(shared_url):
 
 # Function to load the selected sheet
 def load_sheet(xls, sheet_name):
-    return pd.read_excel(xls, sheet_name=sheet_name)
+    df = pd.read_excel(xls, sheet_name=sheet_name)
+    df.columns = map(str.lower, df.columns)  # Convert all column names to lowercase
+    return df
 
 # Get Google Sheet URL
 shared_url = st.text_input("Enter the URL for the Google Sheet:")
@@ -52,19 +54,19 @@ if st.session_state.selected_sheet and st.button("Visualize"):
         table = load_sheet(xls, st.session_state.selected_sheet)
 
         if not table.empty:
-            # Ensure ACTUAL and ESTIMATE are numeric
-            table['ACTUAL'] = pd.to_numeric(table['ACTUAL'], errors='coerce')
-            table['ESTIMATE'] = pd.to_numeric(table['ESTIMATE'], errors='coerce')
+            # Ensure 'actual' and 'estimate' are numeric
+            table['actual'] = pd.to_numeric(table['actual'], errors='coerce')
+            table['estimate'] = pd.to_numeric(table['estimate'], errors='coerce')
 
             # Dev Time Difference
-            table['Dev Time Difference'] = table['ACTUAL'] - table['ESTIMATE']
+            table['dev time difference'] = table['actual'] - table['estimate']
 
             st.subheader("Sprint Health")
             col1, col2 = st.columns(2)
 
             with col1:
-                total_estimate = table['ESTIMATE'].sum()
-                total_actual = table['ACTUAL'].sum()
+                total_estimate = table['estimate'].sum()
+                total_actual = table['actual'].sum()
                 velocity = calculate_velocity(total_actual, total_estimate)
 
                 time_difference = total_estimate - total_actual
@@ -91,18 +93,18 @@ if st.session_state.selected_sheet and st.button("Visualize"):
                 st.plotly_chart(velocity_fig)
 
             with col2:
-                # Convert RISKS to lowercase and handle NaN values
-                table['RISKS'] = table['RISKS'].fillna('').str.lower()
+                # Convert 'risks' to lowercase and handle NaN values
+                table['risks'] = table['risks'].fillna('').str.lower()
 
                 # Shorten the risks for display (e.g., take the first 5 characters and append "...")
-                table['Risk Short'] = table['RISKS'].apply(lambda x: x[:5] + '...' if len(x) > 5 else x)
+                table['risk short'] = table['risks'].apply(lambda x: x[:5] + '...' if len(x) > 5 else x)
 
                 # Count the number of occurrences of each risk type
-                risk_counts = table['RISKS'].value_counts().reset_index()
+                risk_counts = table['risks'].value_counts().reset_index()
                 risk_counts.columns = ['Risk Type', 'Count']
 
                 # Add shortened risk names for hover display
-                risk_counts['Risk Short'] = risk_counts['Risk Type'].apply(lambda x: x[:15] + '...' if len(x) > 5 else x)
+                risk_counts['Risk Short'] = risk_counts['Risk Type'].apply(lambda x: x[:15] + '...' if len(x) > 15 else x)
 
                 # Color map for different risk types
                 color_map = {
@@ -126,53 +128,55 @@ if st.session_state.selected_sheet and st.button("Visualize"):
                     customdata=risk_counts[['Risk Type']],  # Pass the full risk type as customdata
                     hovertemplate="<b>%{customdata[0]}</b><br>Count: %{value}<extra></extra>"  # Display full risk type on hover
                 )
+                fig.update_traces(marker=dict(colors=['green', 'red', 'yellow']))
+                
 
                 # Display the pie chart
                 st.plotly_chart(fig)
 
             # Create a new DataFrame for plotting
-            plot_data = table[['TASK_NAME', 'ESTIMATE', 'ACTUAL']].copy()
-            plot_data['TASK_NAME'] = plot_data['TASK_NAME'].fillna('')  # Fill NaN with empty strings
-            plot_data['TASK-NAME'] = plot_data['TASK_NAME'].str.slice(0, 5) + '...'
+            plot_data = table[['task_name', 'estimate', 'actual']].copy()
+            plot_data['task_name'] = plot_data['task_name'].fillna('')  # Fill NaN with empty strings
+            plot_data['task-name'] = plot_data['task_name'].str.slice(0, 5) + '...'
 
-            # Replace NaN in ACTUAL with 0 for plotting purposes
-            plot_data['ACTUAL'] = plot_data['ACTUAL'].fillna(0)
-            plot_data['ESTIMATE'] = plot_data['ESTIMATE'].fillna(0)
+            # Replace NaN in 'actual' with 0 for plotting purposes
+            plot_data['actual'] = plot_data['actual'].fillna(0)
+            plot_data['estimate'] = plot_data['estimate'].fillna(0)
 
             # Create a new column to represent task status
             plot_data['Status'] = plot_data.apply(
-                lambda row: 'Yet to Start' if row['ESTIMATE'] == 0 and row['ACTUAL'] == 0
-                else 'In Progress' if row['ACTUAL'] == 0
+                lambda row: 'Yet to Start' if row['estimate'] == 0 and row['actual'] == 0
+                else 'In Progress' if row['actual'] == 0
                 else 'Completed', axis=1
             )
 
             # Add a custom value for 'Actual' where it's missing to differentiate
             plot_data['Actual'] = plot_data.apply(
-                lambda row: 0.01 if row['Status'] == 'In Progress' else row['ACTUAL'], axis=1
+                lambda row: 0.01 if row['Status'] == 'In Progress' else row['actual'], axis=1
             )
 
             # Create the grouped bar chart with task progress (Estimate and Actual side by side)
             fig = px.bar(
                 plot_data,
-                x='TASK-NAME',
-                y=['ESTIMATE', 'Actual'],
+                x='task-name',
+                y=['estimate', 'Actual'],
                 barmode='group',
                 title="Estimate vs Actual Task Time",
                 labels={'value': 'Hours', 'variable': 'Type'},
                 text_auto=True,
                 height=600,
-                hover_data={'TASK-NAME': False, 'TASK_NAME': True}
+                hover_data={'task-name': False, 'task_name': True}
             )
 
             # Update the bar colors and labels
-            fig.update_traces(marker=dict(color=['yellow', '#ff7f0e']), selector=dict(name='Actual'))
+            fig.update_traces(marker=dict(color=['yellow', '#ff7f0e']), selector=dict(name='actual'))
             fig.for_each_trace(lambda trace: trace.update(textposition='outside'))
 
             # Show in-progress and yet to start as specific colors or labels
             for i in range(len(plot_data)):
                 if plot_data['Status'].iloc[i] == 'In Progress':
                     fig.add_annotation(
-                        x=plot_data['TASK-NAME'].iloc[i],
+                        x=plot_data['task-name'].iloc[i],
                         y=0.15, 
                         text="In Progress",
                         showarrow=False,
@@ -184,7 +188,7 @@ if st.session_state.selected_sheet and st.button("Visualize"):
                     )
                 elif plot_data['Status'].iloc[i] == 'Yet to Start':
                     fig.add_annotation(
-                        x=plot_data['TASK-NAME'].iloc[i],
+                        x=plot_data['task-name'].iloc[i],
                         y=0.15,  # Position the text slightly above the zero line
                         text="Yet to Start",
                         showarrow=False,
@@ -201,10 +205,10 @@ if st.session_state.selected_sheet and st.button("Visualize"):
 
             with col3:
                 st.subheader("Task Time/Module Time")
-                table['TASK-NAME'] = table['TASK_NAME'].str.slice(0, 5) + '...'
+                table['task-name'] = table['task_name'].str.slice(0, 5) + '...'
 
-                task_time_fig = px.bar(table, x='TASK-NAME', y='ESTIMATE', title="Time per Task",
-                                        hover_data={'TASK-NAME': False, 'TASK_NAME': True})
+                task_time_fig = px.bar(table, x='task-name', y='estimate', title="Time per Task",
+                                        hover_data={'task-name': False, 'task_name': True})
                 st.plotly_chart(task_time_fig)
 
             with col4:
@@ -212,10 +216,10 @@ if st.session_state.selected_sheet and st.button("Visualize"):
 
                 dev_time_fig = px.bar(
                     table,
-                    x='TASK-NAME',
-                    y='ACTUAL',
+                    x='task-name',
+                    y='actual',
                     title="Dev Time",
-                    hover_data={'TASK-NAME': False, 'TASK_NAME': True}
+                    hover_data={'task-name': False, 'task_name': True}
                 )
                 dev_time_fig.update_layout(xaxis_title='Task Name', yaxis_title='Dev Time (hours)')
                 st.plotly_chart(dev_time_fig)
