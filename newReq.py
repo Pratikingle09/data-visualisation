@@ -93,45 +93,40 @@ if st.session_state.selected_sheet and st.button("Visualize"):
                 st.plotly_chart(velocity_fig)
 
             with col2:
-                # Convert 'risks' to lowercase and handle NaN values
                 table['risks'] = table['risks'].fillna('').str.lower()
-
-                # Shorten the risks for display (e.g., take the first 5 characters and append "...")
-                table['risk short'] = table['risks'].apply(lambda x: x[:5] + '...' if len(x) > 5 else x)
-
-                # Count the number of occurrences of each risk type
                 risk_counts = table['risks'].value_counts().reset_index()
                 risk_counts.columns = ['Risk Type', 'Count']
+                risk_counts['Risk Type'] = risk_counts['Risk Type'].replace({
+                    'no risks': 'No Risk',
+                    '': 'No Risk',
+                    'nil': 'No Risk',
+                    'not yet identified': 'Not Yet Identified'
+                })
 
-                # Add shortened risk names for hover display
-                risk_counts['Risk Short'] = risk_counts['Risk Type'].apply(lambda x: x[:15] + '...' if len(x) > 15 else x)
-
-                # Color map for different risk types
                 color_map = {
-                    'risk': 'red',
-                    'no risks': 'green',
-                    'not yet identified': 'yellow'
+                    'Not Yet Identified': 'yellow',
+                    'No Risk': 'green',
+                    'risk': 'red' 
                 }
 
-                # Create the pie chart using shortened names for display and full names on hover
+                risk_counts['Risk Type'] = risk_counts['Risk Type'].where(
+                    risk_counts['Risk Type'].isin(['No Risk', 'Not Yet Identified']),
+                    'risk'
+                )
+
                 fig = px.pie(
                     risk_counts, 
-                    names='Risk Short',  # Use shortened names for display
+                    names='Risk Type',  
                     values='Count', 
                     title='Risk Distribution',
+                    color='Risk Type', 
                     color_discrete_map=color_map, 
                     hole=0.4, 
                     height=500
                 )
-                
                 fig.update_traces(
-                    customdata=risk_counts[['Risk Type']],  # Pass the full risk type as customdata
-                    hovertemplate="<b>%{customdata[0]}</b><br>Count: %{value}<extra></extra>"  # Display full risk type on hover
+                    hovertemplate="<b>%{label}</b><br>Count: %{value}<extra></extra>" 
                 )
-                fig.update_traces(marker=dict(colors=['green', 'red', 'yellow']))
-                
-
-                # Display the pie chart
                 st.plotly_chart(fig)
 
             # Create a new DataFrame for plotting
